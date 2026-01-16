@@ -26,6 +26,7 @@ const defaultState = {
   statuses: [],
   notes: "",
   currentStatus: "invisible",
+  showFullTodoList: false,
   splitSizes: {
     main: [76, 24],
     calendarTodo: [60, 40],
@@ -135,6 +136,8 @@ function cacheElements() {
   elements.todoList = document.getElementById("todo-list");
   elements.todoCount = document.getElementById("todo-count");
   elements.todoSummary = document.getElementById("todo-summary");
+  elements.toggleFullListBtn = document.getElementById("toggle-full-list-btn");
+  elements.toggleFullListText = document.getElementById("toggle-full-list-text");
   elements.statusForm = document.getElementById("status-form");
   elements.statusLabel = document.getElementById("status-label");
   elements.statusColor = document.getElementById("status-color");
@@ -261,13 +264,25 @@ function initSplitPanels() {
     const rightColumn = document.getElementById("right-column");
     
     if (statusPanel && insightsPanel && notesPanel && rightColumn) {
-      // Ensure right column has proper height
+      // Ensure right column has proper height and setup
       rightColumn.style.height = "100%";
+      rightColumn.style.display = "flex";
+      rightColumn.style.flexDirection = "column";
+      rightColumn.style.gap = "0";
+      
+      // Remove conflicting flex properties from panels before Split.js initializes
+      [statusPanel, insightsPanel, notesPanel].forEach(panel => {
+        panel.style.flex = "0 0 auto";
+        panel.style.flexShrink = "0";
+        panel.style.minHeight = "160px";
+        panel.style.height = "auto";
+        panel.style.overflow = "hidden";
+      });
       
       const verticalSplit = Split(["#status-panel", "#insights-panel", "#notes-panel"], {
-    direction: "vertical",
-    sizes: state.splitSizes.rightColumn || [30, 34, 36],
-    minSize: 160,
+        direction: "vertical",
+        sizes: state.splitSizes.rightColumn || [30, 34, 36],
+        minSize: 160,
         gutterSize: 12,
         snapOffset: 0,
         expandToMin: false,
@@ -277,6 +292,8 @@ function initSplitPanels() {
           gutter.style.display = "block";
           gutter.style.visibility = "visible";
           gutter.style.flexShrink = "0";
+          gutter.style.position = "relative";
+          gutter.style.zIndex = "20";
           return gutter;
         },
         onDrag: () => {
@@ -290,14 +307,15 @@ function initSplitPanels() {
           }
         },
         onDragStart: () => {
-          // Ensure panels don't have flex interfering
+          // Ensure panels don't have flex interfering during drag
           [statusPanel, insightsPanel, notesPanel].forEach(panel => {
-            panel.style.flex = "none";
+            panel.style.flex = "0 0 auto";
+            panel.style.flexShrink = "0";
           });
         }
       });
       
-      // Force update to ensure gutters are visible
+      // Force update to ensure gutters are visible and functional
       if (verticalSplit) {
         setTimeout(() => {
           const gutters = rightColumn.querySelectorAll(".gutter.gutter-vertical");
@@ -305,11 +323,13 @@ function initSplitPanels() {
             gutter.style.display = "block";
             gutter.style.visibility = "visible";
             gutter.style.opacity = "1";
+            gutter.style.pointerEvents = "auto";
+            gutter.style.cursor = "row-resize";
           });
-        }, 50);
+        }, 100);
       }
     }
-  }, 200);
+  }, 300);
   
   // Ensure all gutters are visible
   setTimeout(() => {
@@ -513,6 +533,15 @@ function bindForms() {
       overlay.addEventListener("click", closeTodoModal);
     }
   }
+
+  // Toggle full list button
+  if (elements.toggleFullListBtn) {
+    elements.toggleFullListBtn.addEventListener("click", () => {
+      state.showFullTodoList = !state.showFullTodoList;
+      saveState();
+      renderTodos();
+    });
+  }
 }
 
 function bindLists() {
@@ -707,18 +736,92 @@ function renderTomorrowEvents() {
 function renderTodos() {
   const list = elements.todoList;
   const scroll = list.scrollTop;
-  const sortedTodos = [...state.todos].sort(sortTodosByDate);
+  const today = getTodayISO();
+  
+  // Ensure overdue tasks are marked as urgent
+  state.todos.forEach(todo => ensureOverdueUrgency(todo));
+  if (state.todos.some(todo => !todo.completed && todo.dueDate && todo.dueDate < today && todo.priority !== "urgent")) {
+    saveState(); // Save if we updated any priorities
+  }
+  
+  // Filter and process todos
+  let filteredTodos = state.todos.filter((todo) => {
+    // Remove completed tasks that have passed their deadline
+    if (todo.completed && todo.dueDate) {
+      const dueDate = new Date(todo.dueDate + "T00:00:00");
+      const todayDate = new Date(today + "T00:00:00");
+      if (dueDate < todayDate) {
+        return false; // Remove completed tasks past deadline
+      }
+    }
+    return true;
+  });
+  
+  // Filter out tasks that haven't started yet (unless showFullList is enabled)
+  if (!state.showFullTodoList) {
+    filteredTodos = filteredTodos.filter((todo) => {
+      if (todo.completed) return true; // Always show completed tasks
+      if (todo.startDate && todo.startDate > today) {
+        return false; // Hide not-started tasks
+      }
+      return true;
+    });
+  }
+  
+  // Sort todos: by priority first, then by end date, with completed at bottom
+  const sortedTodos = filteredTodos.sort((a, b) => {
+    // Completed tasks go to bottom
+    if (a.completed !== b.completed) {
+      return a.completed ? 1 : -1;
+    }
+    
+    // If both completed, sort by due date (newest first)
+    if (a.completed && b.completed) {
+      const dateA = a.dueDate || a.startDate || "";
+      const dateB = b.dueDate || b.startDate || "";
+      return dateB.localeCompare(dateA);
+    }
+    
+    // Priority order: urgent > important > normal
+    const priorityOrder = { urgent: 0, important: 1, normal: 2 };
+    const priorityA = priorityOrder[a.priority] ?? 2;
+    const priorityB = priorityOrder[b.priority] ?? 2;
+    
+    if (priorityA !== priorityB) {
+      return priorityA - priorityB;
+    }
+    
+    // Same priority: sort by due date (earliest first)
+    const dateA = a.dueDate || a.startDate || "9999-12-31";
+    const dateB = b.dueDate || b.startDate || "9999-12-31";
+    return dateA.localeCompare(dateB);
+  });
+  
   if (!sortedTodos.length) {
-    list.innerHTML = `<div class="empty-state">Add tasks with start and due dates.</div>`;
+    list.innerHTML = `<div class="empty-state">${state.showFullTodoList ? "No tasks." : "Add tasks with start and due dates."}</div>`;
   } else {
     list.innerHTML = sortedTodos.map((todo) => buildTodoCard(todo)).join("");
   }
   list.scrollTop = scroll;
-  elements.todoCount.textContent = `${sortedTodos.length} task${sortedTodos.length === 1 ? "" : "s"}`;
-  const overdueCount = sortedTodos.filter((todo) => getTodoStatus(todo).status === "overdue").length;
-  elements.todoSummary.textContent = sortedTodos.length
-    ? `${sortedTodos.length} tasks · ${overdueCount} overdue`
+  
+  const activeTodos = sortedTodos.filter((todo) => !todo.completed);
+  const overdueCount = sortedTodos.filter((todo) => {
+    const status = getTodoStatus(todo);
+    return status.status === "overdue";
+  }).length;
+  
+  elements.todoCount.textContent = `${activeTodos.length} task${activeTodos.length === 1 ? "" : "s"}`;
+  elements.todoSummary.textContent = activeTodos.length
+    ? `${activeTodos.length} tasks${overdueCount > 0 ? ` · ${overdueCount} overdue` : ""}`
     : "No tasks";
+  
+  // Update toggle button text
+  if (elements.toggleFullListText) {
+    elements.toggleFullListText.textContent = state.showFullTodoList ? "Hide full list" : "See full list";
+  }
+  if (elements.toggleFullListBtn) {
+    elements.toggleFullListBtn.classList.toggle("active", state.showFullTodoList);
+  }
 }
 
 function renderStatusSelector() {
@@ -1385,6 +1488,17 @@ function getTodoStatus(todo) {
     return { status: "upcoming", label: "Starts soon" };
   }
   return { status: "active", label: "In progress" };
+}
+
+// Mark overdue incomplete tasks as urgent
+function ensureOverdueUrgency(todo) {
+  if (!todo.completed && todo.dueDate) {
+    const today = getTodayISO();
+    if (todo.dueDate < today && todo.priority !== "urgent") {
+      todo.priority = "urgent";
+    }
+  }
+  return todo;
 }
 
 function formatDateRange(start, due) {
