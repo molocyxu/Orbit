@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Orbit Command Center</title>
+    <link rel="icon" type="image/png" href="assets/favicon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -22,7 +23,10 @@
         <div class="left-section">
       <header class="app-header">
         <div class="branding">
-          <div class="logo">Orbit</div>
+          <div class="branding-header">
+            <img src="assets/logo.png" alt="Orbit Logo" class="brand-logo" />
+            <div class="logo">Orbit</div>
+          </div>
           <div class="subtitle">Daily command center</div>
         </div>
         <div class="header-center">
@@ -352,6 +356,7 @@
         </div>
         <form id="event-form" class="form-grid event-form-modal">
                   <input type="hidden" id="event-id" />
+                  <input type="hidden" id="event-occurrence-date" />
                   <label class="field span-2">
                     Title
                     <input id="event-title" type="text" placeholder="Stand-up sync" required />
@@ -482,10 +487,53 @@
               <span id="event-form-submit-text">Save event</span>
                     </button>
             <button class="ghost" id="event-clear" type="button">Clear</button>
+            <button class="ghost danger" id="event-delete" type="button" style="display: none;">
+              <i class="fa-solid fa-trash"></i>
+              <span>Delete</span>
+                    </button>
                   </div>
                 </form>
             </div>
           </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal" aria-hidden="true">
+      <div class="modal-overlay"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="confirm-modal-title">Confirm action</h2>
+          <button class="icon-button modal-close" id="confirm-modal-close" aria-label="Close">
+            <i class="fa-solid fa-xmark"></i>
+                    </button>
+                  </div>
+        <div class="confirm-modal-body">
+          <p id="confirm-modal-message">Are you sure you want to proceed?</p>
+          <div id="confirm-recurring-options" class="confirm-recurring-options" style="display: none;">
+            <label class="confirm-radio-option">
+              <input type="radio" name="delete-option" value="single" checked />
+              <div class="radio-content">
+                <div class="radio-title">Delete this occurrence only</div>
+                <div class="radio-description">Only remove this specific instance of the event</div>
+              </div>
+            </label>
+            <label class="confirm-radio-option">
+              <input type="radio" name="delete-option" value="all" />
+              <div class="radio-content">
+                <div class="radio-title">Delete all occurrences</div>
+                <div class="radio-description">Remove this event and all future occurrences</div>
+              </div>
+            </label>
+          </div>
+              </div>
+        <div class="modal-actions">
+          <button class="ghost" id="confirm-modal-cancel">Cancel</button>
+          <button class="primary danger" id="confirm-modal-confirm">
+            <i class="fa-solid fa-trash"></i>
+            <span id="confirm-modal-confirm-text">Delete</span>
+                </button>
+              </div>
+              </div>
+            </div>
 
     <!-- Status Edit/Manage Modal -->
     <div id="status-edit-modal" class="modal" aria-hidden="true">
@@ -496,7 +544,7 @@
           <button class="icon-button modal-close" id="status-edit-modal-close" aria-label="Close">
             <i class="fa-solid fa-xmark"></i>
                     </button>
-                  </div>
+              </div>
         <div id="status-edit-list" class="status-edit-list"></div>
         <div class="modal-actions">
           <button class="ghost" type="button" id="status-edit-modal-close-btn">Done</button>

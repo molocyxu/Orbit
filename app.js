@@ -100,6 +100,7 @@ function cacheElements() {
   elements.liveClock = document.getElementById("live-clock");
   elements.eventForm = document.getElementById("event-form");
   elements.eventId = document.getElementById("event-id");
+  elements.eventOccurrenceDate = document.getElementById("event-occurrence-date");
   elements.eventTitle = document.getElementById("event-title");
   elements.eventDate = document.getElementById("event-date");
   elements.eventStart = document.getElementById("event-start");
@@ -171,6 +172,15 @@ function cacheElements() {
   elements.eventModalClose = document.getElementById("event-modal-close");
   elements.eventModalTitle = document.getElementById("event-modal-title");
   elements.eventFormSubmitText = document.getElementById("event-form-submit-text");
+  elements.eventDelete = document.getElementById("event-delete");
+  elements.confirmModal = document.getElementById("confirm-modal");
+  elements.confirmModalClose = document.getElementById("confirm-modal-close");
+  elements.confirmModalCancel = document.getElementById("confirm-modal-cancel");
+  elements.confirmModalConfirm = document.getElementById("confirm-modal-confirm");
+  elements.confirmModalTitle = document.getElementById("confirm-modal-title");
+  elements.confirmModalMessage = document.getElementById("confirm-modal-message");
+  elements.confirmModalConfirmText = document.getElementById("confirm-modal-confirm-text");
+  elements.confirmRecurringOptions = document.getElementById("confirm-recurring-options");
   elements.addTodoBtn = document.getElementById("add-todo-btn");
   elements.todoModal = document.getElementById("todo-modal");
   elements.todoModalClose = document.getElementById("todo-modal-close");
@@ -373,6 +383,89 @@ function bindForms() {
   });
 
   elements.eventClear.addEventListener("click", clearEventForm);
+  
+  // Event delete button handler
+  if (elements.eventDelete) {
+    elements.eventDelete.addEventListener("click", () => {
+      const eventId = elements.eventId.value;
+      if (!eventId) return;
+      const event = state.events.find(e => e.id === eventId);
+      if (!event) return;
+      
+      // Get the occurrence date (the specific date being edited/deleted)
+      // This is set when opening the modal from a specific occurrence
+      const occurrenceDate = elements.eventOccurrenceDate.value;
+      // Fallback to event date field if occurrence date not set
+      const eventDate = occurrenceDate || elements.eventDate.value || event.date;
+      const isRecurring = event.repeat && event.repeat !== "None";
+      
+      openConfirmModal({
+        title: "Delete event",
+        message: isRecurring 
+          ? `Delete "${event.title}"?` 
+          : `Are you sure you want to delete "${event.title}"?`,
+        showRecurringOptions: isRecurring,
+        confirmText: "Delete",
+        onConfirm: (deleteOption) => {
+          if (isRecurring && deleteOption === "single") {
+            // Add this date to excluded dates
+            const eventIndex = state.events.findIndex(e => e.id === eventId);
+            if (eventIndex >= 0) {
+              if (!state.events[eventIndex].excludedDates) {
+                state.events[eventIndex].excludedDates = [];
+              }
+              if (!state.events[eventIndex].excludedDates.includes(eventDate)) {
+                state.events[eventIndex].excludedDates.push(eventDate);
+              }
+            }
+          } else {
+            // Delete all occurrences
+            state.events = state.events.filter((item) => item.id !== eventId);
+          }
+          saveState();
+          closeEventModal();
+          renderEvents();
+          renderTomorrowEvents();
+          renderInsights();
+          renderMetrics();
+        }
+      });
+    });
+  }
+  
+  // Confirmation modal handlers
+  if (elements.confirmModalClose) {
+    elements.confirmModalClose.addEventListener("click", closeConfirmModal);
+  }
+  
+  if (elements.confirmModalCancel) {
+    elements.confirmModalCancel.addEventListener("click", closeConfirmModal);
+  }
+  
+  if (elements.confirmModalConfirm) {
+    elements.confirmModalConfirm.addEventListener("click", () => {
+      if (confirmModalCallback) {
+        // Get selected delete option if recurring options are shown
+        let deleteOption = "all";
+        if (elements.confirmRecurringOptions && elements.confirmRecurringOptions.style.display !== "none") {
+          const selected = elements.confirmRecurringOptions.querySelector('input[name="delete-option"]:checked');
+          if (selected) {
+            deleteOption = selected.value;
+          }
+        }
+        confirmModalCallback(deleteOption);
+      }
+      closeConfirmModal();
+    });
+  }
+  
+  if (elements.confirmModal) {
+    const overlay = elements.confirmModal.querySelector(".modal-overlay");
+    if (overlay) {
+      overlay.addEventListener("click", closeConfirmModal);
+    }
+  }
+  
   elements.eventAllDay.addEventListener("change", () => {
     const disabled = elements.eventAllDay.checked;
     elements.eventStart.disabled = disabled;
@@ -415,20 +508,22 @@ function bindForms() {
     event.preventDefault();
     const label = elements.statusLabel.value.trim();
     if (!label) return;
-    const imageData = await readFile(elements.statusImage.files[0]);
-    const editId = elements.statusEditId.value;
     
-    if (editId) {
-      // Edit existing status
-      const index = state.statuses.findIndex(s => s.id === editId);
-      if (index >= 0) {
-        state.statuses[index] = {
-          ...state.statuses[index],
-          label,
-          color: elements.statusColor.value,
-          image: imageData || state.statuses[index].image
-        };
-      }
+    try {
+    const imageData = await readFile(elements.statusImage.files[0]);
+      const editId = elements.statusEditId.value;
+      
+      if (editId) {
+        // Edit existing status
+        const index = state.statuses.findIndex(s => s.id === editId);
+        if (index >= 0) {
+          state.statuses[index] = {
+            ...state.statuses[index],
+            label,
+            color: elements.statusColor.value,
+            image: imageData || state.statuses[index].image
+          };
+        }
     } else {
       // Add new status
     state.statuses.unshift({
@@ -439,16 +534,21 @@ function bindForms() {
       createdAt: new Date().toISOString()
     });
     }
-    
+      
     saveState();
     elements.statusForm.reset();
-    elements.statusEditId.value = "";
-    updateFileInputLabel();
-    closeStatusModal();
-    renderStatusSelector();
-    renderStatusDisplay();
-    if (elements.statusEditList) {
-      renderStatusEditList();
+      elements.statusEditId.value = "";
+      updateFileInputLabel();
+      closeStatusModal();
+      renderStatusSelector();
+      renderStatusDisplay();
+      if (elements.statusEditList) {
+        renderStatusEditList();
+        bindStatusEditListEvents();
+      }
+    } catch (error) {
+      console.error("Error saving status:", error);
+      alert("Error saving status. Please try again.");
     }
   });
 
@@ -570,13 +670,14 @@ function bindForms() {
       if (!eventItem) return;
       
       const eventId = eventItem.dataset.eventId;
+      const occurrenceDate = eventItem.dataset.date;
       if (eventId) {
         // Close calendar view modal
         closeCalendarViewModal();
         // Small delay to allow calendar modal to close smoothly
         setTimeout(() => {
-          // Open event edit modal
-          fillEventForm(eventId);
+          // Open event edit modal with the occurrence date
+          fillEventForm(eventId, occurrenceDate);
         }, 150);
       }
     });
@@ -620,15 +721,48 @@ function bindLists() {
     if (!card) return;
     const id = card.dataset.id;
     if (action === "edit-event") {
-      fillEventForm(id);
+      // Get the date this event is being displayed for
+      const occurrenceDate = card.dataset.date || null;
+      fillEventForm(id, occurrenceDate);
     }
     if (action === "delete-event") {
+      const event = state.events.find(e => e.id === id);
+      if (!event) return;
+      
+      const isRecurring = event.repeat && event.repeat !== "None";
+      
+      openConfirmModal({
+        title: "Delete event",
+        message: isRecurring 
+          ? `Delete "${event.title}"?` 
+          : `Are you sure you want to delete "${event.title}"?`,
+        showRecurringOptions: isRecurring,
+        confirmText: "Delete",
+        onConfirm: (deleteOption) => {
+          if (isRecurring && deleteOption === "single") {
+            // Get the date this event is being displayed for
+            const eventDate = card.dataset.date || getTodayISO();
+            // Add this date to excluded dates
+            const eventIndex = state.events.findIndex(e => e.id === id);
+            if (eventIndex >= 0) {
+              if (!state.events[eventIndex].excludedDates) {
+                state.events[eventIndex].excludedDates = [];
+              }
+              if (!state.events[eventIndex].excludedDates.includes(eventDate)) {
+                state.events[eventIndex].excludedDates.push(eventDate);
+              }
+            }
+          } else {
+            // Delete all occurrences
       state.events = state.events.filter((item) => item.id !== id);
+          }
       saveState();
       renderEvents();
-      renderTomorrowEvents();
+          renderTomorrowEvents();
       renderInsights();
       renderMetrics();
+    }
+  });
     }
   };
 
@@ -689,11 +823,22 @@ function bindLists() {
       fillTodoForm(id);
     }
     if (action === "delete-todo") {
+      const todo = state.todos.find(t => t.id === id);
+      if (!todo) return;
+      
+      openConfirmModal({
+        title: "Delete task",
+        message: `Are you sure you want to delete "${todo.title}"?`,
+        showRecurringOptions: false,
+        confirmText: "Delete",
+        onConfirm: () => {
       state.todos = state.todos.filter((item) => item.id !== id);
       saveState();
       renderTodos();
       renderInsights();
       renderMetrics();
+    }
+  });
     }
   });
 }
@@ -722,42 +867,44 @@ function bindControls() {
   // Load sample day with confirmation
   if (elements.loadSample) {
   elements.loadSample.addEventListener("click", () => {
-      const confirmed = window.confirm("Load sample day? This will overwrite all current data.");
-      if (!confirmed) {
-        if (elements.settingsMenuDropdown) {
-          elements.settingsMenuDropdown.classList.remove("visible");
-        }
-        return;
-      }
+      openConfirmModal({
+        title: "Load sample day",
+        message: "This will overwrite all current data. Are you sure?",
+        showRecurringOptions: false,
+        confirmText: "Load sample",
+        onConfirm: () => {
     const sample = getSampleData();
     state = { ...state, ...sample };
     saveState();
     renderAll();
-      if (elements.settingsMenuDropdown) {
-        elements.settingsMenuDropdown.classList.remove("visible");
-      }
+          if (elements.settingsMenuDropdown) {
+            elements.settingsMenuDropdown.classList.remove("visible");
+          }
+        }
   });
+    });
   }
 
   // Reset data with confirmation
   if (elements.resetData) {
   elements.resetData.addEventListener("click", () => {
-    const confirmed = window.confirm("Reset all data for this dashboard?");
-      if (!confirmed) {
-        if (elements.settingsMenuDropdown) {
-          elements.settingsMenuDropdown.classList.remove("visible");
-        }
-        return;
-      }
-      state = { ...defaultState, theme: state.theme, currentStatus: "invisible" };
+      openConfirmModal({
+        title: "Reset all data",
+        message: "Are you sure you want to reset all data for this dashboard? This cannot be undone.",
+        showRecurringOptions: false,
+        confirmText: "Reset",
+        onConfirm: () => {
+          state = { ...defaultState, theme: state.theme, currentStatus: "invisible" };
     saveState();
     clearEventForm();
     clearTodoForm();
     elements.notesInput.value = "";
     renderAll();
-      if (elements.settingsMenuDropdown) {
-        elements.settingsMenuDropdown.classList.remove("visible");
-      }
+          if (elements.settingsMenuDropdown) {
+            elements.settingsMenuDropdown.classList.remove("visible");
+          }
+        }
+      });
   });
   }
 }
@@ -812,7 +959,7 @@ function renderEvents() {
   if (!todaysEvents.length) {
     list.innerHTML = `<div class="empty-state">No events yet. Add one above.</div>`;
   } else {
-    list.innerHTML = todaysEvents.map((event) => buildEventCard(event)).join("");
+    list.innerHTML = todaysEvents.map((event) => buildEventCard(event, today)).join("");
   }
   list.scrollTop = scroll;
   elements.eventCount.textContent = `${todaysEvents.length} event${todaysEvents.length === 1 ? "" : "s"}`;
@@ -837,7 +984,7 @@ function renderTomorrowEvents() {
   if (!tomorrowEvents.length) {
     list.innerHTML = `<div class="empty-state">No events scheduled for tomorrow.</div>`;
   } else {
-    list.innerHTML = tomorrowEvents.map((event) => buildEventCard(event)).join("");
+    list.innerHTML = tomorrowEvents.map((event) => buildEventCard(event, tomorrow)).join("");
   }
   list.scrollTop = scroll;
   
@@ -1156,16 +1303,24 @@ function bindStatusEditListEvents() {
       openStatusModal(true, id);
     } else if (action === "delete-status") {
       const status = state.statuses.find(s => s.id === id);
-      if (status && window.confirm(`Are you sure you want to delete "${status.label}"?`)) {
-        state.statuses = state.statuses.filter(s => s.id !== id);
-        if (state.currentStatus === id) {
-          state.currentStatus = "invisible";
-        }
-        saveState();
-        renderStatusSelector();
-        renderStatusDisplay();
-        renderStatusEditList();
-        bindStatusEditListEvents();
+      if (status) {
+        openConfirmModal({
+          title: "Delete status",
+          message: `Are you sure you want to delete "${status.label}"?`,
+          showRecurringOptions: false,
+          confirmText: "Delete",
+          onConfirm: () => {
+            state.statuses = state.statuses.filter(s => s.id !== id);
+            if (state.currentStatus === id) {
+              state.currentStatus = "invisible";
+            }
+            saveState();
+            renderStatusSelector();
+            renderStatusDisplay();
+            renderStatusEditList();
+            bindStatusEditListEvents();
+          }
+        });
       }
     } else if (action === "move-up") {
       const index = state.statuses.findIndex(s => s.id === id);
@@ -1261,7 +1416,7 @@ function renderMetrics() {
   elements.metricFocus.textContent = focusCount;
 }
 
-function buildEventCard(event) {
+function buildEventCard(event, dateString = null) {
   const status = getEventStatus(event);
   const timeLabel = event.allDay
     ? "All day"
@@ -1275,8 +1430,10 @@ function buildEventCard(event) {
   if (event.repeat === "Custom" && event.repeatDays && event.repeatDays.length > 0) {
     safeRepeat = `Custom (${event.repeatDays.join(", ")})`;
   }
+  // Store the date this event is being displayed for (for single occurrence deletion)
+  const dateAttr = dateString ? ` data-date="${dateString}"` : "";
   return `
-    <div class="event-card ${event.priority} ${status.status}" data-id="${event.id}" style="border-left-color:${event.color}">
+    <div class="event-card ${event.priority} ${status.status}" data-id="${event.id}"${dateAttr} style="border-left-color:${event.color}">
       <div class="event-top">
         <span>${timeLabel}</span>
         <div class="event-actions">
@@ -1412,6 +1569,9 @@ function clearEventForm() {
   elements.eventForm.reset();
   elements.eventId.value = "";
   elements.eventDate.value = getTodayISO();
+  if (elements.eventOccurrenceDate) {
+    elements.eventOccurrenceDate.value = "";
+  }
   elements.eventStart.value = "";
   elements.eventEnd.value = "";
   elements.eventColor.value = colorPalette[0];
@@ -1450,12 +1610,16 @@ function clearTodoForm() {
   elements.todoId.value = "";
 }
 
-function fillEventForm(id) {
+function fillEventForm(id, occurrenceDate = null) {
   const event = state.events.find((item) => item.id === id);
   if (!event) return;
   elements.eventId.value = event.id;
   elements.eventTitle.value = event.title;
   elements.eventDate.value = event.date;
+  // Store the occurrence date if provided (for recurring events)
+  if (elements.eventOccurrenceDate) {
+    elements.eventOccurrenceDate.value = occurrenceDate || "";
+  }
   elements.eventStart.value = event.startTime;
   elements.eventEnd.value = event.endTime;
   elements.eventAllDay.checked = event.allDay;
@@ -1488,9 +1652,11 @@ function openEventModal(isEdit = false) {
   if (isEdit) {
     if (elements.eventModalTitle) elements.eventModalTitle.textContent = "Edit event";
     if (elements.eventFormSubmitText) elements.eventFormSubmitText.textContent = "Save changes";
+    if (elements.eventDelete) elements.eventDelete.style.display = "flex";
   } else {
     if (elements.eventModalTitle) elements.eventModalTitle.textContent = "Create event";
     if (elements.eventFormSubmitText) elements.eventFormSubmitText.textContent = "Save event";
+    if (elements.eventDelete) elements.eventDelete.style.display = "none";
     clearEventForm();
   }
   
@@ -1506,28 +1672,41 @@ function closeEventModal() {
   document.body.style.overflow = "";
 }
 
-function openEventModal(isEdit = false) {
-  if (!elements.eventModal) return;
+// Confirmation Modal Functions
+let confirmModalCallback = null;
+
+function openConfirmModal(options) {
+  if (!elements.confirmModal) return;
   
-  if (isEdit) {
-    elements.eventModalTitle.textContent = "Edit event";
-    elements.eventFormSubmitText.textContent = "Save changes";
-  } else {
-    elements.eventModalTitle.textContent = "Create event";
-    elements.eventFormSubmitText.textContent = "Save event";
-    clearEventForm();
+  const { title, message, showRecurringOptions, confirmText, onConfirm } = options;
+  
+  if (elements.confirmModalTitle) elements.confirmModalTitle.textContent = title || "Confirm action";
+  if (elements.confirmModalMessage) elements.confirmModalMessage.textContent = message || "Are you sure?";
+  if (elements.confirmModalConfirmText) elements.confirmModalConfirmText.textContent = confirmText || "Confirm";
+  
+  // Show/hide recurring options
+  if (elements.confirmRecurringOptions) {
+    elements.confirmRecurringOptions.style.display = showRecurringOptions ? "block" : "none";
+    if (showRecurringOptions) {
+      // Reset to "single" option
+      const radios = elements.confirmRecurringOptions.querySelectorAll('input[type="radio"]');
+      if (radios[0]) radios[0].checked = true;
+    }
   }
   
-  elements.eventModal.classList.add("visible");
-  elements.eventModal.setAttribute("aria-hidden", "false");
+  confirmModalCallback = onConfirm;
+  
+  elements.confirmModal.classList.add("visible");
+  elements.confirmModal.setAttribute("aria-hidden", "false");
   document.body.style.overflow = "hidden";
 }
 
-function closeEventModal() {
-  if (!elements.eventModal) return;
-  elements.eventModal.classList.remove("visible");
-  elements.eventModal.setAttribute("aria-hidden", "true");
+function closeConfirmModal() {
+  if (!elements.confirmModal) return;
+  elements.confirmModal.classList.remove("visible");
+  elements.confirmModal.setAttribute("aria-hidden", "true");
   document.body.style.overflow = "";
+  confirmModalCallback = null;
 }
 
 function fillTodoForm(id) {
@@ -1968,7 +2147,7 @@ function buildCalendarEventCard(event, date) {
     locationHTML = `<div class="calendar-event-meta"><i class="fa-solid fa-location-dot"></i> ${escapeHtml(event.location)}</div>`;
   }
   
-  return `<div class="calendar-event-item ${event.priority || "normal"} ${status.status}" data-event-id="${event.id}" style="border-left-color:${event.color || "#6c7bff"}">
+  return `<div class="calendar-event-item ${event.priority || "normal"} ${status.status}" data-event-id="${event.id}" data-date="${date}" style="border-left-color:${event.color || "#6c7bff"}">
       <div class="calendar-event-time">${timeLabel}</div>
       <div class="calendar-event-title">${escapeHtml(event.title)}</div>
       ${locationHTML}
@@ -1976,6 +2155,11 @@ function buildCalendarEventCard(event, date) {
 }
 
 function shouldEventAppearOnDate(event, dateString) {
+  // Check if this date is excluded (single occurrence deletion)
+  if (event.excludedDates && Array.isArray(event.excludedDates) && event.excludedDates.includes(dateString)) {
+    return false;
+  }
+  
   // If no repeat, check exact date match
   if (!event.repeat || event.repeat === "None") {
     return event.date === dateString;

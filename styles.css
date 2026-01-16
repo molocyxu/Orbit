@@ -141,10 +141,39 @@ body[data-theme="mono"] {
   box-shadow: 0 30px 80px rgba(9, 13, 20, 0.35);
 }
 
+.branding {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.branding-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-logo {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.2));
+  transition: transform var(--transition), filter var(--transition);
+  will-change: transform;
+  flex-shrink: 0;
+}
+
+.brand-logo:hover {
+  transform: scale(1.05);
+  filter: drop-shadow(0 4px 12px rgba(108, 123, 255, 0.3));
+}
+
 .branding .logo {
   font-family: "Space Grotesk", sans-serif;
   font-size: 28px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
 }
 
 .branding .subtitle {
@@ -2002,6 +2031,107 @@ input[type="color"]:focus {
 
 .settings-menu-item span {
   flex: 1;
+}
+
+/* Confirmation Modal Styles */
+.confirm-modal-body {
+  padding: 24px;
+}
+
+.confirm-modal-body p {
+  margin: 0 0 20px 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.confirm-recurring-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.confirm-radio-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.confirm-radio-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.confirm-radio-option input[type="radio"] {
+  margin: 0;
+  margin-top: 2px;
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.confirm-radio-option input[type="radio"]:checked + .radio-content {
+  color: var(--text);
+}
+
+.confirm-radio-option:has(input[type="radio"]:checked) {
+  background: rgba(108, 123, 255, 0.1);
+  border-color: var(--accent);
+}
+
+.radio-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.radio-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.radio-description {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.modal-actions .primary.danger {
+  background: #f43f5e;
+  border-color: #f43f5e;
+  color: #fff;
+}
+
+.modal-actions .primary.danger:hover {
+  background: #e11d48;
+  border-color: #e11d48;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(244, 63, 94, 0.3);
+}
+
+.modal-actions .ghost.danger {
+  color: #f43f5e;
+  border-color: rgba(244, 63, 94, 0.3);
+}
+
+.modal-actions .ghost.danger:hover {
+  background: rgba(244, 63, 94, 0.1);
+  border-color: rgba(244, 63, 94, 0.5);
 }
 
 /* Calendar View Styles */
