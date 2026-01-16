@@ -1932,9 +1932,9 @@ input[type="color"]:focus {
 /* Settings Menu Styles */
 /* Sticky Image (Bottom Left) */
 .sticky-image {
-  position: absolute;
-  bottom: 24px;
-  left: 48px;
+  position: fixed;
+  bottom: 0px;
+  left: 216px;
   z-index: 50;
   height: 120px;
   width: auto;
