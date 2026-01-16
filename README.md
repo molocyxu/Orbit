@@ -2,7 +2,7 @@
 
 A high-end, feature-rich productivity application that combines calendar management, task tracking, status monitoring, and personal insights into a single, elegant interface. Built with vanilla JavaScript, HTML5, and CSS3, Orbit provides a smooth, modern experience for managing your daily workflow.
 
-![Orbit Productivity Dashboard](https://img.shields.io/badge/Status-Active-success) ![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow) ![License](https://img.shields.io/badge/License-MIT-blue)
+![Orbit Productivity Dashboard](https://img.shields.io/badge/Status-Active-success) ![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow)
 
 ## 🌟 Features
 
