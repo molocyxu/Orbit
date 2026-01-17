@@ -772,22 +772,38 @@ function bindForms() {
     });
   }
 
-  // Calendar event click handlers (using event delegation)
+  // Calendar event and todo click handlers (using event delegation)
   if (elements.calendarWeekGrid) {
     elements.calendarWeekGrid.addEventListener("click", (event) => {
       const eventItem = event.target.closest(".calendar-event-item");
-      if (!eventItem) return;
+      if (eventItem) {
+        const eventId = eventItem.dataset.eventId;
+        const occurrenceDate = eventItem.dataset.date;
+        if (eventId) {
+          // Close calendar view modal
+          closeCalendarViewModal();
+          // Small delay to allow calendar modal to close smoothly
+          setTimeout(() => {
+            // Open event edit modal with the occurrence date
+            fillEventForm(eventId, occurrenceDate);
+          }, 150);
+        }
+        return;
+      }
       
-      const eventId = eventItem.dataset.eventId;
-      const occurrenceDate = eventItem.dataset.date;
-      if (eventId) {
-        // Close calendar view modal
-        closeCalendarViewModal();
-        // Small delay to allow calendar modal to close smoothly
-        setTimeout(() => {
-          // Open event edit modal with the occurrence date
-          fillEventForm(eventId, occurrenceDate);
-        }, 150);
+      // Handle todo clicks
+      const todoItem = event.target.closest(".calendar-todo-item");
+      if (todoItem) {
+        const todoId = todoItem.dataset.todoId;
+        if (todoId) {
+          // Close calendar view modal
+          closeCalendarViewModal();
+          // Small delay to allow calendar modal to close smoothly
+          setTimeout(() => {
+            // Open todo edit modal
+            fillTodoForm(todoId);
+          }, 150);
+        }
       }
     });
   }
@@ -2301,6 +2317,38 @@ function renderCalendarWeek() {
     return sortCalendarEvents(dayEvents);
   });
   
+  // Get all todos that appear on days in this week
+  const weekTodos = weekDates.map(date => {
+    return state.todos.filter(todo => {
+      if (todo.completed) return false;
+      // Todo appears on a date if:
+      // - The date is between startDate and dueDate (inclusive)
+      // - Or if no startDate, appears from dueDate onwards
+      // - Or if no dates, doesn't appear in calendar
+      if (!todo.startDate && !todo.dueDate) return false;
+      
+      const checkDate = new Date(date + "T00:00:00");
+      let startDate = null;
+      let dueDate = null;
+      
+      if (todo.startDate) {
+        startDate = new Date(todo.startDate + "T00:00:00");
+      }
+      if (todo.dueDate) {
+        dueDate = new Date(todo.dueDate + "T00:00:00");
+      }
+      
+      // If date is before start date, don't show
+      if (startDate && checkDate < startDate) return false;
+      
+      // If date is after due date, don't show
+      if (dueDate && checkDate > dueDate) return false;
+      
+      // Show if date is within range or on boundary dates
+      return true;
+    });
+  });
+  
   // Day names
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const dayAbbr = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -2314,12 +2362,20 @@ function renderCalendarWeek() {
     const dayNum = dateObj.getDate();
     const monthName = dateObj.toLocaleDateString(undefined, { month: "short" });
     const events = weekEvents[index];
+    const todos = weekTodos[index];
     
     let eventsHTML = "";
-    if (events.length === 0) {
-      eventsHTML = '<div class="calendar-empty-day">No events</div>';
+    if (events.length === 0 && todos.length === 0) {
+      eventsHTML = '<div class="calendar-empty-day">No events or tasks</div>';
     } else {
       eventsHTML = events.map(event => buildCalendarEventCard(event, date)).join("");
+    }
+    
+    let todosHTML = "";
+    if (todos.length > 0) {
+      todosHTML = '<div class="calendar-todos-section"><div class="calendar-todos-label">Tasks</div>' +
+        todos.map(todo => buildCalendarTodoCard(todo, date)).join("") +
+        '</div>';
     }
     
     return `<div class="calendar-day-column ${isToday ? "today" : ""}">
@@ -2331,6 +2387,7 @@ function renderCalendarWeek() {
         <div class="calendar-day-events">
           ${eventsHTML}
         </div>
+        ${todosHTML}
       </div>`;
   }).join("");
   
@@ -2355,6 +2412,55 @@ function buildCalendarEventCard(event, date) {
       <div class="calendar-event-time">${timeLabel}</div>
       <div class="calendar-event-title">${escapeHtml(event.title)}</div>
       ${locationHTML}
+    </div>`;
+}
+
+function buildCalendarTodoCard(todo, date) {
+  const status = getTodoStatus(todo);
+  const checkDate = new Date(date + "T00:00:00");
+  let startDate = null;
+  let dueDate = null;
+  
+  if (todo.startDate) {
+    startDate = new Date(todo.startDate + "T00:00:00");
+  }
+  if (todo.dueDate) {
+    dueDate = new Date(todo.dueDate + "T00:00:00");
+  }
+  
+  const isStartDate = startDate && checkDate.getTime() === startDate.getTime();
+  const isDueDate = dueDate && checkDate.getTime() === dueDate.getTime();
+  const isOverdue = status.status === "overdue";
+  
+  // Priority-based border color
+  let borderColor = "#8b8b9a"; // Default gray
+  if (todo.priority === "urgent") {
+    borderColor = "#f43f5e"; // Red
+  } else if (todo.priority === "important") {
+    borderColor = "#f59e0b"; // Amber
+  }
+  
+  let markersHTML = "";
+  if (isStartDate && isDueDate) {
+    markersHTML = '<div class="calendar-todo-markers"><span class="calendar-todo-marker start-end" title="Starts & Due">●</span></div>';
+  } else if (isStartDate) {
+    markersHTML = '<div class="calendar-todo-markers"><span class="calendar-todo-marker start" title="Starts">▶</span></div>';
+  } else if (isDueDate) {
+    markersHTML = '<div class="calendar-todo-markers"><span class="calendar-todo-marker end" title="Due">●</span></div>';
+  } else {
+    markersHTML = '<div class="calendar-todo-markers"><span class="calendar-todo-marker ongoing" title="Ongoing">━</span></div>';
+  }
+  
+  const overdueClass = isOverdue ? " overdue" : "";
+  const completedClass = todo.completed ? " completed" : "";
+  
+  return `<div class="calendar-todo-item ${todo.priority || "normal"}${overdueClass}${completedClass}" data-todo-id="${todo.id}" style="border-left-color:${borderColor}">
+      ${markersHTML}
+      <div class="calendar-todo-content">
+        <div class="calendar-todo-title">${escapeHtml(todo.title)}</div>
+        ${isDueDate && !todo.completed ? `<div class="calendar-todo-due-badge">Due today</div>` : ""}
+        ${isOverdue ? `<div class="calendar-todo-overdue-badge">Overdue</div>` : ""}
+      </div>
     </div>`;
 }
 

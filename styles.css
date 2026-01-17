@@ -2414,6 +2414,9 @@ input[type="color"]:focus {
   padding: 8px;
   overflow-y: auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .calendar-empty-day {
@@ -2514,4 +2517,162 @@ input[type="color"]:focus {
 
 .calendar-event-meta i {
   font-size: 9px;
+}
+
+/* Calendar Todos Section */
+.calendar-todos-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.15);
+  margin-top: auto;
+}
+
+.calendar-todos-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  padding: 0 2px;
+}
+
+.calendar-todo-item {
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: all var(--transition);
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.calendar-todo-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateX(2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.calendar-todo-item.urgent {
+  border-left-color: #f43f5e;
+  background: rgba(244, 63, 94, 0.08);
+}
+
+.calendar-todo-item.important {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.calendar-todo-item.overdue {
+  background: rgba(244, 63, 94, 0.12);
+  border-left-color: #f43f5e;
+}
+
+.calendar-todo-item.completed {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.calendar-todo-markers {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 16px;
+  justify-content: center;
+}
+
+.calendar-todo-marker {
+  font-size: 10px;
+  color: var(--muted);
+  transition: color var(--transition);
+  line-height: 1;
+}
+
+.calendar-todo-item:hover .calendar-todo-marker {
+  color: var(--accent);
+}
+
+.calendar-todo-marker.start {
+  color: #52c9a0;
+}
+
+.calendar-todo-marker.end {
+  color: #f43f5e;
+}
+
+.calendar-todo-marker.start-end {
+  color: #6c7bff;
+  font-size: 12px;
+}
+
+.calendar-todo-marker.ongoing {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.calendar-todo-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.calendar-todo-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.3;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-todo-item.completed .calendar-todo-title {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.calendar-todo-due-badge {
+  font-size: 8px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: rgba(108, 123, 255, 0.2);
+  color: var(--accent);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.calendar-todo-overdue-badge {
+  font-size: 8px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: rgba(244, 63, 94, 0.2);
+  color: #ff6b6b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+  animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
