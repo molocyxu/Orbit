@@ -1583,6 +1583,7 @@ input[type="color"]:focus {
   width: 95vw;
   max-height: 90vh;
   height: 90vh;
+  min-height: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -2386,6 +2387,7 @@ input[type="color"]:focus {
 
 .calendar-today-btn {
   margin-left: auto;
+  margin-right: 24px;
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
@@ -2405,6 +2407,7 @@ input[type="color"]:focus {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   flex: 1;
   min-height: 0;
+  max-height: calc(90vh - 80px);
   overflow: hidden;
   height: 100%;
 }
@@ -2415,8 +2418,18 @@ input[type="color"]:focus {
   background: var(--panel-strong);
   min-height: 0;
   height: 100%;
+  max-height: 100%;
   position: relative;
-  overflow: visible;
+  overflow: hidden;
+}
+
+.calendar-day-column > .calendar-day-events {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.calendar-day-column > .calendar-todos-section {
+  flex: 0 0 auto;
 }
 
 .calendar-day-column.today {
@@ -2475,7 +2488,6 @@ input[type="color"]:focus {
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
-  max-height: 100%;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -2637,6 +2649,9 @@ input[type="color"]:focus {
   align-items: center;
   gap: 6px;
   font-size: 11px;
+  min-height: 28px;
+  height: 28px;
+  box-sizing: border-box;
 }
 
 .calendar-todo-item:hover {
@@ -2805,12 +2820,16 @@ input[type="color"]:focus {
   }
   
   .calendar-todos-section {
-    /* Keep todos fully visible even on small screens */
+    /* Keep todos visible without scrolling on small screens */
     overflow: visible;
   }
   
   .calendar-day-events {
     /* Ensure events can scroll on small screens */
     max-height: calc(95vh - 200px);
+  }
+  
+  .calendar-week-grid {
+    max-height: calc(95vh - 80px);
   }
 }
