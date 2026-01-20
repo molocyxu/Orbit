@@ -1277,10 +1277,11 @@ function renderTodos() {
   const list = elements.todoList;
   const scroll = list.scrollTop;
   const today = getTodayISO();
+  const tomorrow = getTomorrowISO();
   
-  // Ensure overdue tasks are marked as urgent
+  // Ensure due-soon tasks are marked as urgent (due tomorrow, today, or overdue)
   state.todos.forEach(todo => ensureOverdueUrgency(todo));
-  if (state.todos.some(todo => !todo.completed && todo.dueDate && todo.dueDate < today && todo.priority !== "urgent")) {
+  if (state.todos.some(todo => !todo.completed && todo.dueDate && todo.dueDate <= tomorrow && todo.priority !== "urgent")) {
     saveState(); // Save if we updated any priorities
   }
   
@@ -1364,11 +1365,9 @@ function renderTodos() {
   // Update toggle button states
   if (elements.toggleFullListBtn) {
     elements.toggleFullListBtn.classList.toggle("active", state.showFullTodoList);
-    elements.toggleFullListBtn.title = state.showFullTodoList ? "Hide full task list" : "Show full task list";
   }
   if (elements.toggleCompletedBtn) {
     elements.toggleCompletedBtn.classList.toggle("active", state.showCompletedTodos);
-    elements.toggleCompletedBtn.title = state.showCompletedTodos ? "Hide completed tasks" : "Show completed tasks";
   }
 }
 
@@ -2131,8 +2130,9 @@ function getTodoStatus(todo) {
 function ensureOverdueUrgency(todo) {
   if (!todo.completed && todo.dueDate) {
     const today = getTodayISO();
-    // Mark tasks as urgent if due date has passed or is today
-    if (todo.dueDate <= today && todo.priority !== "urgent") {
+    const tomorrow = getTomorrowISO();
+    // Mark tasks as urgent if due date is tomorrow, today, or overdue
+    if (todo.dueDate <= tomorrow && todo.priority !== "urgent") {
       todo.priority = "urgent";
     }
   }
