@@ -279,7 +279,12 @@ function cacheElements() {
   elements.confirmModalTitle = document.getElementById("confirm-modal-title");
   elements.confirmModalMessage = document.getElementById("confirm-modal-message");
   elements.confirmModalConfirmText = document.getElementById("confirm-modal-confirm-text");
+  elements.confirmModalConfirmIcon = document.getElementById("confirm-modal-confirm-icon");
   elements.confirmRecurringOptions = document.getElementById("confirm-recurring-options");
+  elements.recurringOptionSingleTitle = document.getElementById("recurring-option-single-title");
+  elements.recurringOptionSingleDesc = document.getElementById("recurring-option-single-desc");
+  elements.recurringOptionAllTitle = document.getElementById("recurring-option-all-title");
+  elements.recurringOptionAllDesc = document.getElementById("recurring-option-all-desc");
   elements.addTodoBtn = document.getElementById("add-todo-btn");
   elements.todoModal = document.getElementById("todo-modal");
   elements.todoModalClose = document.getElementById("todo-modal-close");
@@ -386,8 +391,8 @@ function initSplitPanels() {
     }
   });
   
-  // Vertical split for right column panels
-  // Wait a bit to ensure DOM is ready and other splits are initialized
+  // Right column panels use flexbox layout (no split functionality)
+  // Set up proper flex layout for the right column panels
   setTimeout(() => {
     const statusPanel = document.getElementById("status-panel");
     const insightsPanel = document.getElementById("insights-panel");
@@ -395,80 +400,19 @@ function initSplitPanels() {
     const rightColumn = document.getElementById("right-column");
     
     if (statusPanel && insightsPanel && notesPanel && rightColumn) {
-      // Ensure right column has proper height and setup
+      // Ensure right column has proper flex layout
       rightColumn.style.height = "100%";
       rightColumn.style.display = "flex";
       rightColumn.style.flexDirection = "column";
-      rightColumn.style.gap = "0";
+      rightColumn.style.gap = "18px";
       
-      // Remove conflicting flex properties from panels before Split.js initializes
+      // Set panels to use flex with equal distribution
       [statusPanel, insightsPanel, notesPanel].forEach(panel => {
-        panel.style.flex = "0 0 auto";
-        panel.style.flexShrink = "0";
+        panel.style.flex = "1 1 auto";
         panel.style.minHeight = "160px";
-        panel.style.height = "auto";
         panel.style.overflow = "hidden";
       });
-      
-      const verticalSplit = Split(["#status-panel", "#insights-panel", "#notes-panel"], {
-    direction: "vertical",
-        sizes: state.splitSizes.rightColumn || [30, 34, 36],
-    minSize: 160,
-        gutterSize: 12,
-        snapOffset: 0,
-        expandToMin: false,
-        gutter: (index, direction) => {
-          const gutter = document.createElement("div");
-          gutter.className = `gutter gutter-${direction}`;
-          gutter.style.display = "block";
-          gutter.style.visibility = "visible";
-          gutter.style.flexShrink = "0";
-          gutter.style.position = "relative";
-          gutter.style.zIndex = "20";
-          return gutter;
-        },
-        onDrag: () => {
-          document.body.style.cursor = "row-resize";
-        },
-        onDragEnd: () => {
-          document.body.style.cursor = "";
-          if (verticalSplit) {
-            state.splitSizes.rightColumn = verticalSplit.getSizes();
-            saveState();
-          }
-        },
-        onDragStart: () => {
-          // Ensure panels don't have flex interfering during drag
-          [statusPanel, insightsPanel, notesPanel].forEach(panel => {
-            panel.style.flex = "0 0 auto";
-            panel.style.flexShrink = "0";
-          });
-        }
-      });
-      
-      // Force update to ensure gutters are visible and functional
-      if (verticalSplit) {
-        setTimeout(() => {
-          const gutters = rightColumn.querySelectorAll(".gutter.gutter-vertical");
-          gutters.forEach(gutter => {
-            gutter.style.display = "block";
-            gutter.style.visibility = "visible";
-            gutter.style.opacity = "1";
-            gutter.style.pointerEvents = "auto";
-            gutter.style.cursor = "row-resize";
-          });
-        }, 100);
-      }
     }
-  }, 300);
-  
-  // Ensure all gutters are visible
-  setTimeout(() => {
-    const gutters = document.querySelectorAll(".gutter");
-    gutters.forEach(gutter => {
-      gutter.style.display = "block";
-      gutter.style.visibility = "visible";
-    });
   }, 100);
 }
 
@@ -477,19 +421,78 @@ function bindForms() {
     event.preventDefault();
     const payload = getEventFormData();
     if (!payload) return;
-    const existingIndex = state.events.findIndex((item) => item.id === payload.id);
-    if (existingIndex >= 0) {
-      state.events[existingIndex] = payload;
+    
+    // Check if we're editing a recurring event with a specific occurrence date
+    const existingEvent = state.events.find((item) => item.id === payload.id);
+    const occurrenceDate = elements.eventOccurrenceDate.value;
+    const isRecurring = existingEvent && existingEvent.repeat && existingEvent.repeat !== "None";
+    const isEditingOccurrence = isRecurring && occurrenceDate && occurrenceDate !== existingEvent.date;
+    
+    if (isEditingOccurrence) {
+      // Show confirmation modal for recurring event edit
+      openConfirmModal({
+        title: "Edit recurring event",
+        message: `Edit "${existingEvent.title}"?`,
+        showRecurringOptions: true,
+        confirmText: "Save",
+        optionType: "edit",
+        onConfirm: (editOption) => {
+          if (editOption === "single") {
+            // Edit this occurrence only: create a new event for this date and exclude the original occurrence
+            const originalEvent = state.events.find((item) => item.id === payload.id);
+            if (originalEvent) {
+              // Add the original occurrence date to excluded dates
+              if (!originalEvent.excludedDates) {
+                originalEvent.excludedDates = [];
+              }
+              if (!originalEvent.excludedDates.includes(occurrenceDate)) {
+                originalEvent.excludedDates.push(occurrenceDate);
+              }
+              
+              // Create a new event for this specific occurrence (non-recurring)
+              // Use the occurrence date, not the form date (which might be the original event date)
+              const newEvent = {
+                ...payload,
+                id: createId(),
+                date: occurrenceDate, // Use the specific occurrence date
+                repeat: "None",
+                repeatDays: null,
+                excludedDates: null // New event doesn't need excluded dates
+              };
+              state.events.unshift(newEvent);
+            }
+          } else {
+            // Edit all occurrences: update the original event
+            const existingIndex = state.events.findIndex((item) => item.id === payload.id);
+            if (existingIndex >= 0) {
+              state.events[existingIndex] = payload;
+            }
+          }
+          saveState();
+          clearEventForm();
+          renderEvents();
+          renderTomorrowEvents();
+          renderInsights();
+          renderMetrics();
+          closeEventModal();
+        }
+      });
     } else {
-      state.events.unshift(payload);
+      // Normal edit or create: no confirmation needed
+      const existingIndex = state.events.findIndex((item) => item.id === payload.id);
+      if (existingIndex >= 0) {
+        state.events[existingIndex] = payload;
+      } else {
+        state.events.unshift(payload);
+      }
+      saveState();
+      clearEventForm();
+      renderEvents();
+      renderTomorrowEvents();
+      renderInsights();
+      renderMetrics();
+      closeEventModal();
     }
-    saveState();
-    clearEventForm();
-    renderEvents();
-    renderTomorrowEvents();
-    renderInsights();
-    renderMetrics();
-    closeEventModal();
   });
 
   elements.eventClear.addEventListener("click", clearEventForm);
@@ -555,15 +558,15 @@ function bindForms() {
   if (elements.confirmModalConfirm) {
     elements.confirmModalConfirm.addEventListener("click", () => {
       if (confirmModalCallback) {
-        // Get selected delete option if recurring options are shown
-        let deleteOption = "all";
+        // Get selected recurring option if recurring options are shown
+        let recurringOption = "all";
         if (elements.confirmRecurringOptions && elements.confirmRecurringOptions.style.display !== "none") {
-          const selected = elements.confirmRecurringOptions.querySelector('input[name="delete-option"]:checked');
+          const selected = elements.confirmRecurringOptions.querySelector('input[name="recurring-option"]:checked');
           if (selected) {
-            deleteOption = selected.value;
+            recurringOption = selected.value;
           }
         }
-        confirmModalCallback(deleteOption);
+        confirmModalCallback(recurringOption);
       }
       closeConfirmModal();
     });
@@ -873,6 +876,7 @@ function bindLists() {
           : `Are you sure you want to delete "${event.title}"?`,
         showRecurringOptions: isRecurring,
         confirmText: "Delete",
+        optionType: "delete",
         onConfirm: (deleteOption) => {
           if (isRecurring && deleteOption === "single") {
             // Get the date this event is being displayed for
@@ -2010,19 +2014,49 @@ let confirmModalCallback = null;
 function openConfirmModal(options) {
   if (!elements.confirmModal) return;
   
-  const { title, message, showRecurringOptions, confirmText, onConfirm } = options;
+  const { title, message, showRecurringOptions, confirmText, onConfirm, optionType = "delete" } = options;
   
   if (elements.confirmModalTitle) elements.confirmModalTitle.textContent = title || "Confirm action";
   if (elements.confirmModalMessage) elements.confirmModalMessage.textContent = message || "Are you sure?";
   if (elements.confirmModalConfirmText) elements.confirmModalConfirmText.textContent = confirmText || "Confirm";
   
-  // Show/hide recurring options
+  // Update button icon and styling based on optionType
+  if (elements.confirmModalConfirm) {
+    if (optionType === "edit") {
+      // For edit: use save icon and remove danger styling
+      if (elements.confirmModalConfirmIcon) {
+        elements.confirmModalConfirmIcon.className = "fa-solid fa-floppy-disk";
+      }
+      elements.confirmModalConfirm.classList.remove("danger");
+    } else {
+      // For delete: use trash icon and add danger styling
+      if (elements.confirmModalConfirmIcon) {
+        elements.confirmModalConfirmIcon.className = "fa-solid fa-trash";
+      }
+      elements.confirmModalConfirm.classList.add("danger");
+    }
+  }
+  
+  // Show/hide recurring options and update labels based on optionType
   if (elements.confirmRecurringOptions) {
     elements.confirmRecurringOptions.style.display = showRecurringOptions ? "block" : "none";
     if (showRecurringOptions) {
       // Reset to "single" option
-      const radios = elements.confirmRecurringOptions.querySelectorAll('input[type="radio"]');
+      const radios = elements.confirmRecurringOptions.querySelectorAll('input[name="recurring-option"]');
       if (radios[0]) radios[0].checked = true;
+      
+      // Update labels based on optionType (edit or delete)
+      if (optionType === "edit") {
+        if (elements.recurringOptionSingleTitle) elements.recurringOptionSingleTitle.textContent = "Edit this occurrence only";
+        if (elements.recurringOptionSingleDesc) elements.recurringOptionSingleDesc.textContent = "Only modify this specific instance of the event";
+        if (elements.recurringOptionAllTitle) elements.recurringOptionAllTitle.textContent = "Edit all occurrences";
+        if (elements.recurringOptionAllDesc) elements.recurringOptionAllDesc.textContent = "Modify this event and all future occurrences";
+      } else {
+        if (elements.recurringOptionSingleTitle) elements.recurringOptionSingleTitle.textContent = "Delete this occurrence only";
+        if (elements.recurringOptionSingleDesc) elements.recurringOptionSingleDesc.textContent = "Only remove this specific instance of the event";
+        if (elements.recurringOptionAllTitle) elements.recurringOptionAllTitle.textContent = "Delete all occurrences";
+        if (elements.recurringOptionAllDesc) elements.recurringOptionAllDesc.textContent = "Remove this event and all future occurrences";
+      }
     }
   }
   

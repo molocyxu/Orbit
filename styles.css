@@ -296,14 +296,10 @@ body[data-theme="mono"] {
 #right-column .panel {
   min-height: 0;
   overflow: hidden;
-  flex-shrink: 0;
+  flex: 1 1 auto;
   height: auto;
   position: relative;
-}
-
-/* Allow Split.js to control panel sizing */
-#right-column.split .panel {
-  flex: 0 0 auto;
+  min-height: 160px;
 }
 
 #right-column > .panel {
@@ -1501,10 +1497,6 @@ input[type="color"]:focus {
   min-width: 320px;
 }
 
-#right-column.split {
-  display: flex;
-  flex-direction: column;
-}
 
 @keyframes slideInRight {
   from {

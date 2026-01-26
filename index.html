@@ -532,17 +532,17 @@
           <p id="confirm-modal-message">Are you sure you want to proceed?</p>
           <div id="confirm-recurring-options" class="confirm-recurring-options" style="display: none;">
             <label class="confirm-radio-option">
-              <input type="radio" name="delete-option" value="single" checked />
+              <input type="radio" name="recurring-option" value="single" checked />
               <div class="radio-content">
-                <div class="radio-title">Delete this occurrence only</div>
-                <div class="radio-description">Only remove this specific instance of the event</div>
+                <div class="radio-title" id="recurring-option-single-title">Edit this occurrence only</div>
+                <div class="radio-description" id="recurring-option-single-desc">Only modify this specific instance of the event</div>
               </div>
             </label>
             <label class="confirm-radio-option">
-              <input type="radio" name="delete-option" value="all" />
+              <input type="radio" name="recurring-option" value="all" />
               <div class="radio-content">
-                <div class="radio-title">Delete all occurrences</div>
-                <div class="radio-description">Remove this event and all future occurrences</div>
+                <div class="radio-title" id="recurring-option-all-title">Edit all occurrences</div>
+                <div class="radio-description" id="recurring-option-all-desc">Modify this event and all future occurrences</div>
               </div>
             </label>
           </div>
@@ -550,7 +550,7 @@
         <div class="modal-actions">
           <button class="ghost" id="confirm-modal-cancel">Cancel</button>
           <button class="primary danger" id="confirm-modal-confirm">
-            <i class="fa-solid fa-trash"></i>
+            <i id="confirm-modal-confirm-icon" class="fa-solid fa-trash"></i>
             <span id="confirm-modal-confirm-text">Delete</span>
                 </button>
               </div>
