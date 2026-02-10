@@ -2202,6 +2202,12 @@ function openConfirmModal(options) {
         elements.confirmModalConfirmIcon.className = "fa-solid fa-floppy-disk";
       }
       elements.confirmModalConfirm.classList.remove("danger");
+    } else if (optionType === "load") {
+      // For load: use download icon and remove danger styling
+      if (elements.confirmModalConfirmIcon) {
+        elements.confirmModalConfirmIcon.className = "fa-solid fa-download";
+      }
+      elements.confirmModalConfirm.classList.remove("danger");
     } else {
       // For delete: use trash icon and add danger styling
       if (elements.confirmModalConfirmIcon) {
@@ -3121,10 +3127,10 @@ async function renderPresetList() {
           </div>
         </div>
         <div class="preset-item-actions">
-          <button class="icon-button" data-preset-action="load" data-preset-name="${escapeHtml(name)}" title="Load">
-            <i class="fa-solid fa-folder-open"></i>
+          <button class="icon-button primary" data-preset-action="load" data-preset-name="${escapeHtml(name)}" title="Load workspace">
+            <i class="fa-solid fa-download"></i>
           </button>
-          <button class="icon-button danger" data-preset-action="delete" data-preset-name="${escapeHtml(name)}" title="Delete">
+          <button class="icon-button danger" data-preset-action="delete" data-preset-name="${escapeHtml(name)}" title="Delete workspace">
             <i class="fa-solid fa-trash"></i>
           </button>
         </div>
@@ -3146,6 +3152,7 @@ async function renderPresetList() {
           message: `Load "${presetName}"? This will overwrite your current workspace.`,
           showRecurringOptions: false,
           confirmText: "Load",
+          optionType: "load",
           onConfirm: () => {
             loadPreset(presetName);
           }
