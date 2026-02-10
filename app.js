@@ -1,6 +1,7 @@
 const STORAGE_KEY = "orbit_state_v1";
 // Presets are now stored in IndexedDB (see db.js)
 // Migration from localStorage is handled in migration.js
+// Version: 2024-01-15 - Added multi-day events/tasks support
 const INSIGHT_RANGE_DAYS = 7;
 
 const themeOptions = [
@@ -42,6 +43,69 @@ let state = null; // Will be loaded asynchronously
 let notesTimer = null;
 let currentCalendarWeek = null; // Stores the start date of the currently viewed week (Sunday)
 
+// Migrate old event/task format to new format
+function migrateEventsAndTasks(state) {
+  if (!state) return false;
+  
+  let migrated = false;
+  
+  // Migrate events: convert old format (date, startTime, endTime) to new format (startDate, startTime, endDate, endTime)
+  if (state.events && Array.isArray(state.events)) {
+    state.events = state.events.map(event => {
+      if (!event) return event;
+      
+      // If already migrated (has startDate), skip
+      if (event.startDate) {
+        return event;
+      }
+      
+      // Migrate old format
+      if (event.date) {
+        migrated = true;
+        return {
+          ...event,
+          startDate: event.date,
+          endDate: event.date, // Single day events stay single day
+          // startTime and endTime already exist
+        };
+      }
+      
+      return event;
+    });
+  }
+  
+  // Migrate tasks: convert old format (startDate, dueDate) to new format (startDate, startTime, dueDate, dueTime)
+  if (state.todos && Array.isArray(state.todos)) {
+    state.todos = state.todos.map(todo => {
+      if (!todo) return todo;
+      
+      // If already migrated (has startTime or dueTime), skip
+      if (todo.startTime || todo.dueTime) {
+        return todo;
+      }
+      
+      // Migrate old format - single day tasks go from 12:00 AM to 11:59 PM
+      migrated = true;
+      const migratedTodo = { ...todo };
+      
+      if (migratedTodo.startDate && !migratedTodo.startTime) {
+        migratedTodo.startTime = "00:00";
+      }
+      if (migratedTodo.dueDate && !migratedTodo.dueTime) {
+        migratedTodo.dueTime = "23:59";
+      }
+      
+      return migratedTodo;
+    });
+  }
+  
+  if (migrated) {
+    console.log("Migrated events and tasks to new format with separate start/end dates and times");
+  }
+  
+  return migrated; // Return whether migration occurred
+}
+
 async function loadState() {
   try {
     // Try to get state from IndexedDB first (use db.* namespace)
@@ -49,7 +113,10 @@ async function loadState() {
       try {
         const savedState = await window.dbGetState();
         if (savedState) {
+          // savedState is the data object directly from IndexedDB
           const loaded = { ...defaultState, ...savedState };
+          // Migrate old format to new format (only runs once per dataset)
+          const wasMigrated = migrateEventsAndTasks(loaded);
           // Ensure currentStatus exists
           if (!loaded.currentStatus) {
             loaded.currentStatus = "invisible";
@@ -62,6 +129,19 @@ async function loadState() {
               ...defaultState.splitSizes,
               ...loaded.splitSizes
             };
+          }
+          // Save migrated state immediately if migration occurred
+          if (wasMigrated) {
+            try {
+              // Save the migrated state directly
+              if (typeof window.dbSaveState === "function") {
+                await window.dbSaveState(loaded);
+              } else {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
+              }
+            } catch (e) {
+              console.error("Error saving migrated state:", e);
+            }
           }
           return loaded;
         }
@@ -76,6 +156,8 @@ async function loadState() {
       if (raw) {
     const parsed = JSON.parse(raw);
         const loaded = { ...defaultState, ...parsed };
+        // Migrate old format to new format
+        const wasMigrated = migrateEventsAndTasks(loaded);
         // Ensure currentStatus exists
         if (!loaded.currentStatus) {
           loaded.currentStatus = "invisible";
@@ -88,6 +170,19 @@ async function loadState() {
             ...defaultState.splitSizes,
             ...loaded.splitSizes
           };
+        }
+        // Save migrated state immediately if migration occurred
+        if (wasMigrated) {
+          try {
+            // Save the migrated state
+            if (typeof window.dbSaveState === "function") {
+              await window.dbSaveState(loaded);
+            } else {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
+            }
+          } catch (e) {
+            console.error("Error saving migrated state:", e);
+          }
         }
         return loaded;
       }
@@ -105,6 +200,12 @@ async function loadState() {
 
 async function saveState() {
   try {
+    // Don't save if state is null or not initialized
+    if (!state) {
+      console.warn("Cannot save state: state is null");
+      return;
+    }
+    
     // Save to IndexedDB if available (use db.* namespace)
     if (typeof window.dbSaveState === "function") {
       await window.dbSaveState(state);
@@ -143,6 +244,8 @@ async function init() {
     if (!state) {
       console.warn("State is null, using default state");
       state = { ...defaultState };
+      // Only save if we had to use default (new user)
+      await saveState();
     }
     
   cacheElements();
@@ -201,9 +304,14 @@ function cacheElements() {
   elements.eventId = document.getElementById("event-id");
   elements.eventOccurrenceDate = document.getElementById("event-occurrence-date");
   elements.eventTitle = document.getElementById("event-title");
-  elements.eventDate = document.getElementById("event-date");
-  elements.eventStart = document.getElementById("event-start");
-  elements.eventEnd = document.getElementById("event-end");
+  elements.eventStartDate = document.getElementById("event-start-date");
+  elements.eventStartTime = document.getElementById("event-start-time");
+  elements.eventEndDate = document.getElementById("event-end-date");
+  elements.eventEndTime = document.getElementById("event-end-time");
+  // Keep for backward compatibility
+  elements.eventDate = elements.eventStartDate;
+  elements.eventStart = elements.eventStartTime;
+  elements.eventEnd = elements.eventEndTime;
   elements.eventAllDay = document.getElementById("event-allday");
   elements.eventPriority = document.getElementById("event-priority");
   elements.eventCalendar = document.getElementById("event-calendar");
@@ -228,8 +336,13 @@ function cacheElements() {
   elements.todoForm = document.getElementById("todo-form");
   elements.todoId = document.getElementById("todo-id");
   elements.todoTitle = document.getElementById("todo-title");
-  elements.todoStart = document.getElementById("todo-start");
-  elements.todoDue = document.getElementById("todo-due");
+  elements.todoStartDate = document.getElementById("todo-start-date");
+  elements.todoStartTime = document.getElementById("todo-start-time");
+  elements.todoDueDate = document.getElementById("todo-due-date");
+  elements.todoDueTime = document.getElementById("todo-due-time");
+  // Keep for backward compatibility
+  elements.todoStart = elements.todoStartDate;
+  elements.todoDue = elements.todoDueDate;
   elements.todoLink = document.getElementById("todo-link");
   elements.todoPriority = document.getElementById("todo-priority");
   elements.todoNotes = document.getElementById("todo-notes");
@@ -454,7 +567,9 @@ function bindForms() {
               const newEvent = {
                 ...payload,
                 id: createId(),
-                date: occurrenceDate, // Use the specific occurrence date
+                date: occurrenceDate, // Keep for backward compatibility
+                startDate: occurrenceDate, // Use the specific occurrence date
+                endDate: payload.endDate || occurrenceDate,
                 repeat: "None",
                 repeatDays: null,
                 excludedDates: null // New event doesn't need excluded dates
@@ -479,18 +594,18 @@ function bindForms() {
       });
     } else {
       // Normal edit or create: no confirmation needed
-      const existingIndex = state.events.findIndex((item) => item.id === payload.id);
-      if (existingIndex >= 0) {
-        state.events[existingIndex] = payload;
-      } else {
-        state.events.unshift(payload);
-      }
-      saveState();
-      clearEventForm();
-      renderEvents();
+    const existingIndex = state.events.findIndex((item) => item.id === payload.id);
+    if (existingIndex >= 0) {
+      state.events[existingIndex] = payload;
+    } else {
+      state.events.unshift(payload);
+    }
+    saveState();
+    clearEventForm();
+    renderEvents();
       renderTomorrowEvents();
-      renderInsights();
-      renderMetrics();
+    renderInsights();
+    renderMetrics();
       closeEventModal();
     }
   });
@@ -508,8 +623,8 @@ function bindForms() {
       // Get the occurrence date (the specific date being edited/deleted)
       // This is set when opening the modal from a specific occurrence
       const occurrenceDate = elements.eventOccurrenceDate.value;
-      // Fallback to event date field if occurrence date not set
-      const eventDate = occurrenceDate || elements.eventDate.value || event.date;
+      // Fallback to event start date field if occurrence date not set
+      const eventDate = occurrenceDate || elements.eventStartDate.value || event.startDate || event.date;
       const isRecurring = event.repeat && event.repeat !== "None";
       
       openConfirmModal({
@@ -581,8 +696,8 @@ function bindForms() {
   
   elements.eventAllDay.addEventListener("change", () => {
     const disabled = elements.eventAllDay.checked;
-    elements.eventStart.disabled = disabled;
-    elements.eventEnd.disabled = disabled;
+    elements.eventStartTime.disabled = disabled;
+    elements.eventEndTime.disabled = disabled;
   });
 
   // Handle custom repeat days
@@ -1721,9 +1836,24 @@ function renderMetrics() {
 function buildEventCard(event, dateString = null) {
   // Use the occurrence date (dateString) for status calculation, not the original event date
   const status = getEventStatus(event, dateString);
-  const timeLabel = event.allDay
-    ? "All day"
-    : `${formatTime(event.startTime)} - ${formatTime(event.endTime)}`;
+
+  const startDate = event.startDate || event.date;
+  const endDate = event.endDate || startDate;
+
+  let timeLabel = "";
+  if (event.allDay) {
+    if (startDate === endDate) {
+      timeLabel = "All day";
+    } else {
+      timeLabel = `${formatShortDate(startDate)} - ${formatShortDate(endDate)}`;
+    }
+  } else {
+    if (startDate === endDate) {
+      timeLabel = `${formatTime(event.startTime)} - ${formatTime(event.endTime)}`;
+    } else {
+      timeLabel = `${formatShortDate(startDate)} ${formatTime(event.startTime)} - ${formatShortDate(endDate)} ${formatTime(event.endTime)}`;
+    }
+  }
   const safeLocation = escapeHtml(event.location || "");
   const safeGuests = escapeHtml(event.guests || "");
   const safeCalendar = escapeHtml(event.calendar || "Calendar");
@@ -1798,9 +1928,24 @@ function buildInsightItem(title, date, time) {
 function buildEventTooltip(event) {
   const status = getEventStatus(event);
   const link = safeUrl(event.link);
-  const timeLabel = event.allDay
-    ? "All day"
-    : `${formatTime(event.startTime)} - ${formatTime(event.endTime)}`;
+
+  const startDate = event.startDate || event.date;
+  const endDate = event.endDate || startDate;
+
+  let timeLabel = "";
+  if (event.allDay) {
+    if (startDate === endDate) {
+      timeLabel = "All day";
+    } else {
+      timeLabel = `${formatShortDate(startDate)} - ${formatShortDate(endDate)}`;
+    }
+  } else {
+    if (startDate === endDate) {
+      timeLabel = `${formatTime(event.startTime)} - ${formatTime(event.endTime)}`;
+    } else {
+      timeLabel = `${formatShortDate(startDate)} ${formatTime(event.startTime)} - ${formatShortDate(endDate)} ${formatTime(event.endTime)}`;
+    }
+  }
   return `
     <div class="tooltip-title">${escapeHtml(event.title)}</div>
     <div class="tooltip-grid">
@@ -1854,21 +1999,30 @@ function buildTodoToggleTooltip(kind, isActive) {
 function getEventFormData() {
   const title = elements.eventTitle.value.trim();
   if (!title) return null;
-  const date = elements.eventDate.value || getTodayISO();
-  let startTime = elements.eventStart.value || formatTimeInput(new Date());
-  let endTime = elements.eventEnd.value || addMinutesToTime(startTime, 60);
+
+  const startDate = elements.eventStartDate.value || getTodayISO();
+  const endDate = elements.eventEndDate.value || startDate;
+  let startTime = elements.eventStartTime.value || formatTimeInput(new Date());
+  let endTime = elements.eventEndTime.value || addMinutesToTime(startTime, 60);
   const allDay = elements.eventAllDay.checked;
+
   if (allDay) {
     startTime = "00:00";
     endTime = "23:59";
-  } else if (timeToMinutes(endTime) <= timeToMinutes(startTime)) {
+  } else {
+    // If end date is same as start date, ensure end time is after start time
+    if (endDate === startDate && timeToMinutes(endTime) <= timeToMinutes(startTime)) {
     endTime = addMinutesToTime(startTime, 60);
   }
+  }
+
   return {
     id: elements.eventId.value || createId(),
     title,
-    date,
+    date: startDate, // Keep for backward compatibility
+    startDate,
     startTime,
+    endDate,
     endTime,
     allDay,
     priority: elements.eventPriority.value,
@@ -1889,11 +2043,19 @@ function getTodoFormData() {
   const title = elements.todoTitle.value.trim();
   if (!title) return null;
   const existing = state.todos.find((item) => item.id === elements.todoId.value);
+  
+  const startDate = elements.todoStartDate.value || "";
+  const dueDate = elements.todoDueDate.value || "";
+  const startTime = elements.todoStartTime.value || "00:00";
+  const dueTime = elements.todoDueTime.value || "23:59";
+  
   return {
     id: elements.todoId.value || createId(),
     title,
-    startDate: elements.todoStart.value,
-    dueDate: elements.todoDue.value,
+    startDate,
+    startTime,
+    dueDate,
+    dueTime,
     link: elements.todoLink.value.trim(),
     priority: elements.todoPriority.value,
     notes: elements.todoNotes.value.trim(),
@@ -1904,15 +2066,17 @@ function getTodoFormData() {
 function clearEventForm() {
   elements.eventForm.reset();
   elements.eventId.value = "";
-  elements.eventDate.value = getTodayISO();
+  const today = getTodayISO();
+  elements.eventStartDate.value = today;
+  elements.eventEndDate.value = today;
   if (elements.eventOccurrenceDate) {
     elements.eventOccurrenceDate.value = "";
   }
-  elements.eventStart.value = "";
-  elements.eventEnd.value = "";
+  elements.eventStartTime.value = "";
+  elements.eventEndTime.value = "";
   elements.eventColor.value = colorPalette[0];
-  elements.eventStart.disabled = false;
-  elements.eventEnd.disabled = false;
+  elements.eventStartTime.disabled = false;
+  elements.eventEndTime.disabled = false;
   if (elements.customRepeatDays) {
     elements.customRepeatDays.style.display = "none";
     clearCustomRepeatDays();
@@ -1944,20 +2108,30 @@ function clearCustomRepeatDays() {
 function clearTodoForm() {
   elements.todoForm.reset();
   elements.todoId.value = "";
+  elements.todoStartTime.value = "00:00";
+  elements.todoDueTime.value = "23:59";
 }
 
 function fillEventForm(id, occurrenceDate = null) {
   const event = state.events.find((item) => item.id === id);
   if (!event) return;
+  
   elements.eventId.value = event.id;
   elements.eventTitle.value = event.title;
-  elements.eventDate.value = event.date;
+
+  const startDate = event.startDate || event.date || getTodayISO();
+  const endDate = event.endDate || startDate;
+
+  elements.eventStartDate.value = startDate;
+  elements.eventEndDate.value = endDate;
+
   // Store the occurrence date if provided (for recurring events)
   if (elements.eventOccurrenceDate) {
     elements.eventOccurrenceDate.value = occurrenceDate || "";
   }
-  elements.eventStart.value = event.startTime;
-  elements.eventEnd.value = event.endTime;
+
+  elements.eventStartTime.value = event.startTime || "";
+  elements.eventEndTime.value = event.endTime || "";
   elements.eventAllDay.checked = event.allDay;
   elements.eventPriority.value = event.priority;
   elements.eventCalendar.value = event.calendar;
@@ -1977,8 +2151,8 @@ function fillEventForm(id, occurrenceDate = null) {
   elements.eventGuests.value = event.guests;
   elements.eventDescription.value = event.description;
   elements.eventColor.value = event.color;
-  elements.eventStart.disabled = event.allDay;
-  elements.eventEnd.disabled = event.allDay;
+  elements.eventStartTime.disabled = event.allDay;
+  elements.eventEndTime.disabled = event.allDay;
   openEventModal(true);
 }
 
@@ -2078,10 +2252,13 @@ function closeConfirmModal() {
 function fillTodoForm(id) {
   const todo = state.todos.find((item) => item.id === id);
   if (!todo) return;
+  
   elements.todoId.value = todo.id;
   elements.todoTitle.value = todo.title;
-  elements.todoStart.value = todo.startDate;
-  elements.todoDue.value = todo.dueDate;
+  elements.todoStartDate.value = todo.startDate || "";
+  elements.todoStartTime.value = todo.startTime || "00:00";
+  elements.todoDueDate.value = todo.dueDate || "";
+  elements.todoDueTime.value = todo.dueTime || "23:59";
   elements.todoLink.value = todo.link;
   elements.todoPriority.value = todo.priority;
   elements.todoNotes.value = todo.notes;
@@ -2252,10 +2429,12 @@ function sortEventsByTime(a, b) {
 }
 
 function sortEventsByDate(a, b) {
-  if (a.date === b.date) {
+  const aDate = a.startDate || a.date;
+  const bDate = b.startDate || b.date;
+  if (aDate === bDate) {
     return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
   }
-  return a.date.localeCompare(b.date);
+  return aDate.localeCompare(bDate);
 }
 
 function sortCalendarEvents(events) {
@@ -2548,9 +2727,30 @@ function renderCalendarWeek() {
 function buildCalendarEventCard(event, date) {
   // Use the occurrence date for status calculation
   const status = getEventStatus(event, date);
-  let timeLabel = "All day";
-  if (!event.allDay && event.startTime && event.endTime) {
-    timeLabel = `${formatTime(event.startTime)} - ${formatTime(event.endTime)}`;
+
+  const startDate = event.startDate || event.date;
+  const endDate = event.endDate || startDate;
+
+  let timeLabel = "";
+  if (event.allDay) {
+    if (startDate === endDate) {
+      timeLabel = "All day";
+    } else {
+      timeLabel = `${formatShortDate(startDate)} - ${formatShortDate(endDate)}`;
+    }
+  } else {
+    if (startDate === endDate) {
+      timeLabel = `${formatTime(event.startTime)} - ${formatTime(event.endTime)}`;
+    } else {
+      // For multi-day events, show date range
+      if (date === startDate) {
+        timeLabel = `${formatTime(event.startTime)} - ${formatShortDate(endDate)} ${formatTime(event.endTime)}`;
+      } else if (date === endDate) {
+        timeLabel = `${formatShortDate(startDate)} ${formatTime(event.startTime)} - ${formatTime(event.endTime)}`;
+      } else {
+        timeLabel = `${formatShortDate(startDate)} - ${formatShortDate(endDate)}`;
+      }
+    }
   }
   
   let locationHTML = "";
@@ -2620,12 +2820,15 @@ function shouldEventAppearOnDate(event, dateString) {
     return false;
   }
   
-  // If no repeat, check exact date match
+  // If no repeat, check if date is within the event's date range
   if (!event.repeat || event.repeat === "None") {
-    return event.date === dateString;
+    const checkDate = new Date(dateString + "T00:00:00");
+    const start = new Date((event.startDate || event.date) + "T00:00:00");
+    const end = new Date((event.endDate || event.startDate || event.date) + "T23:59:59");
+    return checkDate >= start && checkDate <= end;
   }
 
-  const eventDate = new Date(event.date + "T00:00:00");
+  const eventDate = new Date((event.startDate || event.date) + "T00:00:00");
   const checkDate = new Date(dateString + "T00:00:00");
   
   // Event must not be in the future (can't appear before it's created)
@@ -2636,7 +2839,7 @@ function shouldEventAppearOnDate(event, dateString) {
   // Handle different repeat patterns
   switch (event.repeat) {
     case "Daily":
-      // Show every day from the event date onwards
+      // Show every day from the event start date onwards
       return true;
 
     case "Weekly":
@@ -2659,7 +2862,10 @@ function shouldEventAppearOnDate(event, dateString) {
       return event.repeatDays.includes(todayDayName);
 
     default:
-      return event.date === dateString;
+      // Fallback: check if date is within the event's date range
+      const start = new Date((event.startDate || event.date) + "T00:00:00");
+      const end = new Date((event.endDate || event.startDate || event.date) + "T23:59:59");
+      return checkDate >= start && checkDate <= end;
   }
 }
 
